@@ -1,125 +1,205 @@
+# Simulador RISC-V (RV32I)
 
-## Visão Geral da Arquitetura
+Simulador didático de um processador **RISC-V RV32I de ciclo múltiplo**, executado inteiramente no navegador (React + Vite). O projeto reúne um montador de Assembly, uma memória endereçada por byte (little-endian), o banco de 32 registradores e uma interface que mostra, estágio por estágio, o que acontece no caminho de dados a cada pulso de clock.
 
-O projeto é dividido em quatro camadas independentes:
-
-```
-processadorsim/
-├── mac1/           # Unidade de Controle + componentes do datapath
-├── mac2/           # Mac1 + Cache
-├── mac3/           # Mac2 + Pipeline
-├── montador/       # Assembler de dois passes (tokenizador → código de máquina)
-└── src/            # Interface React (visualização e controle)
-```
+> O projeto nasceu como simulador do MAC-1 (o MIC-1 de Tanenbaum) e foi migrado para RV32I. Parte dos arquivos do MAC-1 continua no repositório; veja [Código legado](#código-legado-mac-1).
 
 ---
 
-## Componentes do MAC-1 (`mac1/componentes/`)
+## Funcionalidades
 
-O datapath é implementado como objetos JavaScript independentes que se comunicam via leitura/escrita direta. Os principais são:
-
-| Componente | Descrição |
-|---|---|
-| `Clock` | Gera pulsos divididos em 4 subciclos por microinstrução |
-| `ControlStore (cs)` | ROM de 512 posições com o microprograma completo do MAC-1 |
-| `MIR` | Registrador de microinstrução: decodifica os campos `amux`, `alu`, `sh`, `mbr`, `mar`, `enc`, `cond`, `addr`, `a`, `b`, `c` |
-| `MPC` | Contador de microprograma (aponta para a próxima microinstrução) |
-| `ALU` | Realiza operações aritméticas e lógicas; expõe flags `Z` (zero) e `N` (negativo) |
-| `AMUX` | Multiplexador de entrada A da ALU (escolhe entre Latch A ou MBR) |
-| `MMUX` | Multiplexador do próximo endereço de microinstrução |
-| `MSL` | Lógica de desvio condicional (usa flags Z/N + campo `cond` do MIR) |
-| `Shifter` | Deslocador de bits (left/right shift) na saída da ALU |
-| `MAR / MBR` | Registradores de endereço e dado de memória |
-| `Registers` | Banco de registradores (PC, AC, SP, IR, TIR, etc.) |
-| `LatchA / LatchB` | Buffers intermediários do datapath |
-| `Increment` | Incrementador do MPC |
+- **Unidade de controle como FSM de 5 estágios**: Fetch, Decode, Execute, Memory e Write-back, um estágio por pulso de clock.
+- **ISA RV32I** nos formatos R, I, S, B, U e J (`FENCE` não é suportada; `ECALL`/`EBREAK` são decodificadas, mas não fazem nada).
+- **Montador de duas passagens** com rótulos, comentários, imediatos em decimal/hex/binário e 22 pseudoinstruções (`li`, `mv`, `j`, `ret`, `beqz`...).
+- **Importação de binários reais** (`.bin` gerado com `objcopy`) em um endereço base configurável.
+- **Visualização do caminho de dados**: registradores x0–x31 (HEX/DEC/BIN), PC, MAR, MBR/MDR, operandos, saída da ALU com flags Z/N, resultado do desvio e etapa atual.
+- **Janelas de memória** (até 3 simultâneas) com troca de base e busca por endereço.
+- **IPS real**: instruções por segundo medidas em tempo real.
+- **Log de eventos** (instruções executadas e escritas na RAM).
+- **Três processadores selecionáveis** na interface (`RV32I`, `RV32I (Cache D)` e `RV32I (Cache A)`). Hoje só o primeiro está completo; veja [Estado atual](#estado-atual-e-limitações-conhecidas).
 
 ---
 
-## A Unidade de Controle (`mac1/controlUnit.js`)
+## Como executar
 
-A `ControlUnit` orquestra todos os componentes e executa cada microinstrução em **4 subciclos fixos**:
+Requisitos: **Node.js 20.19+ ou 22.12+** (exigência do Vite 8) e npm.
 
+```bash
+npm install
+npm run dev       # http://localhost:5173
 ```
-Subciclo 1 — Fetch da microinstrução
-  MPC → CS → MIR
 
-Subciclo 2 — Busca dos operandos
-  DecoderA/B/C decodificam os campos a/b/c do MIR
-  LatchA ← Registrador[A]
-  LatchB ← Registrador[B]
+Outros comandos:
 
-Subciclo 3 — Execução
-  MAR ← LatchB  (se mir.mar = 1)
-  MBR ← RAM[MAR] ou RAM ← MBR  (leitura/escrita conforme mir.wr)
-  AMUX → ALU → Shifter
-
-Subciclo 4 — Write-back e próximo endereço
-  Registrador[C] ← Shifter  (se mir.enc = 1)
-  MSL avalia condição de desvio
-  MMUX seleciona próximo MPC
+```bash
+npm run build     # gera a build de produção em dist/
+npm run preview   # serve a build localmente
+npm run lint      # ESLint (ainda com pendências)
 ```
+
+### Fluxo de uso
+
+1. Abra o painel **Instructions** (botão flutuante) e escreva o código Assembly. Já há um programa de exemplo carregado.
+2. Clique em **Montar Programa RV32I**. O código é montado e gravado na RAM a partir do endereço `0x0`.
+3. Abra uma janela de memória com **+** para acompanhar as escritas.
+4. Clique em **►** para executar e em **||** para pausar. O campo **Tempo (ms)** com o botão **Set Clock** muda o intervalo entre estágios (padrão: 1000 ms).
+5. **Clear** limpa a RAM e reseta registradores e clock.
+
+Para usar um programa compilado, use **Upload .bin** no painel de memória (veja [Binários externos](#binários-externos-bin)).
 
 ---
 
-## O Clock (`mac1/componentes/clock.js`)
+## Estrutura do projeto
 
-O `Clock` controla o ritmo de execução via `setInterval`:
+```
+.
+├── mac1/                      # Processador RV32I base
+│   ├── controlUnit.js         # Unidade de controle: decodificador + FSM de 5 estágios
+│   ├── componentes/
+│   │   ├── alu.js             # ALU e avaliação de condições de desvio
+│   │   ├── registers.js       # x0–x31, PC, nomes ABI, helpers toHex32/toBinary32
+│   │   ├── memory.js          # RAM byte a byte, little-endian (instância única)
+│   │   ├── clock.js           # Clock de 5 subciclos
+│   │   └── amux, mir, mpc...  # legado do MAC-1 (não usados)
+│   └── manual/                # Referência do MAC-1 (legado)
+├── mac2/                      # Variante "Cache D" (estende o mac1)
+├── mac3/                      # Variante "Cache A" (estende o mac1)
+├── montador/
+│   ├── montador.js            # Assembler de duas passagens
+│   └── macroinstrucoes.js     # Codificadores R/I/S/B/U/J e tabela de opcodes
+├── src/                       # Interface React
+│   ├── App.jsx                # Alterna entre "Simulador" e "Comparacao"
+│   ├── context/MacContext.jsx # Processador ativo (mac1 | mac2 | mac3)
+│   ├── hooks/useIPS.js        # Medição de instruções por segundo
+│   ├── services/              # simulationLog.js e performanceTracker.js
+│   ├── components/            # memory, SImulation, instructions, simulationLog
+│   └── pages/RaceComparison/  # Página de comparação entre processadores
+└── testes/                    # Scripts de teste em Node
+```
+
+> `testes/teste3.js` não é um teste: é o módulo que instancia o `Clock` e as três unidades de controle usadas pela interface.
+
+---
+
+## Arquitetura
+
+### Unidade de controle (`mac1/controlUnit.js`)
+
+A `ControlUnit` executa uma instrução em **5 subciclos**, chamados por `rodarCiclo(subciclo, ciclos)`:
+
+| Subciclo | Estágio | O que acontece |
+|:---:|---|---|
+| 1 | **FETCH** (IF) | Lê a palavra de 32 bits em `RAM[PC]` para o IR/MBR, calcula `PC + 4` e registra a instrução no log |
+| 2 | **DECODE** (ID) | Separa `opcode`, `rd`, `rs1`, `rs2`, `funct3`, `funct7` e o imediato (com extensão de sinal); lê `rs1`/`rs2` para os latches A e B |
+| 3 | **EXECUTE** (EX) | A ALU opera sobre registradores/imediato; calcula o endereço de loads/stores, a condição e o alvo de desvios, e o link de `JAL`/`JALR` |
+| 4 | **MEMORY** (MEM) | Loads leem a RAM (`LB`/`LH`/`LW`/`LBU`/`LHU`) para o MDR; stores escrevem (`SB`/`SH`/`SW`) |
+| 5 | **WRITE-BACK** (WB) | Grava `rd` (x0 é ignorado) com o MDR ou a saída da ALU, atualiza o PC (`PC + 4`, desvio ou salto) e incrementa o contador de instruções concluídas |
+
+Outros métodos úteis: `getEstado()` (snapshot completo para a interface), `setCallback()` (notifica a UI a cada subciclo), `reset()` e `hardReset(baseAddress)`.
+
+### Clock (`mac1/componentes/clock.js`)
 
 ```js
-clock.setVelocidade(250);  // intervalo em ms entre subciclos
-clock.iniciar(uc);         // inicia execução contínua
-clock.pausar();            // para a execução
-clock.resetClock();        // reinicia contadores
+const clock = new Clock();
+clock.setVelocidade(250);  // ms entre subciclos (padrão: 1000)
+clock.iniciar(uc);         // execução contínua, um estágio por tick
+clock.pausar();            // pausa sem perder estado
+clock.pulso(uc);           // executa uma instrução completa (5 subciclos)
+clock.resetClock();        // zera subciclo e contador de ciclos
 ```
 
-Cada tick chama `uc.rodarCiclo(subciclo)`, onde `subciclo` vai de 1 a 4 ciclicamente. Um ciclo completo (4 subciclos) executa **uma microinstrução**.
+O contador de ciclos aumenta a cada 5 subciclos, ou seja, uma vez por instrução.
+
+### Registradores (`mac1/componentes/registers.js`)
+
+32 registradores de 32 bits (`x0`–`x31`) mais o PC. `x0` é sempre zero: escritas são ignoradas. O montador aceita tanto `x0`–`x31` quanto os nomes ABI (`zero`, `ra`, `sp`, `gp`, `tp`, `t0`–`t6`, `s0`/`fp`–`s11`, `a0`–`a7`).
+
+### Memória (`mac1/componentes/memory.js`)
+
+- Endereçamento por byte, **little-endian**, com leitura e escrita de byte, meia-palavra e palavra.
+- Existe uma única instância (`memoria`), compartilhada por toda a aplicação.
+- **Tamanho padrão: 128 bytes (32 palavras).** O tamanho deve ser potência de 2, pois os endereços são mascarados por `size - 1` (acessos fora da faixa dão a volta). Para programas maiores, altere o valor padrão de `new Memory(sizeInBytes)`. A interface espelha até 4096 palavras.
+
+### ALU (`mac1/componentes/alu.js`)
+
+Operações: `ADD`, `SUB`, `SLL`, `SLT`, `SLTU`, `XOR`, `SRL`, `SRA`, `OR`, `AND`. Gera as flags `Z` (zero) e `N` (negativo). As condições de desvio (`BEQ`, `BNE`, `BLT`, `BGE`, `BLTU`, `BGEU`) são avaliadas por `testBranchCondition()`.
 
 ---
 
 ## O Montador (`montador/`)
 
-O assembler converte código Assembly MAC-1 em palavras binárias de 16 bits e as grava na memória.
+### Fluxo
 
-### Fluxo em três etapas
+1. **Primeira passagem** (`primeira_passagem`): remove comentários, identifica rótulos, expande pseudoinstruções e atribui endereços (`PC = índice × 4`).
+2. **Segunda passagem** (`segunda_passagem`): resolve rótulos em offsets relativos ao PC, extrai `rd`/`rs1`/`rs2`/`imm` e codifica cada instrução em 32 bits.
+3. **`preencherMemoria()`** grava as palavras na RAM a partir do endereço `0` e registra as instruções no log.
 
-**1. Tokenização** (`tokeniza_codigo`)
-Cada linha é separada em `{ rotulo, rotulo_index, opcode, operando }`. Comentários iniciados por `;` são descartados. Valida opcodes e ranges de operandos.
+```js
+import Montador from "./montador/montador.js";
 
-**2. Primeira passagem** (`primeira_passagem`)
-Resolve rótulos — substitui referências simbólicas (ex: `JUMP loop`) pelo endereço numérico correspondente. Roda em O(n²) para garantir que rótulos declarados depois de seu uso também sejam resolvidos.
+const montador = new Montador(codigo);
+const erro = montador.main();           // false = sucesso; string = mensagem de erro
+if (!erro) montador.preencherMemoria();
+```
 
-**3. Segunda passagem** (`segunda_passagem`)
-Converte cada instrução em binário de 16 bits: 4 bits de opcode + 12 bits de operando (ou 8 bits para `INSP`/`DESP`).
+### Sintaxe
 
-### Conjunto de instruções suportado
+- Comentários com `#` ou `;`.
+- Rótulos no formato `nome:`, sozinhos na linha ou antes da instrução (sem diferenciar maiúsculas de minúsculas).
+- Imediatos em decimal, `0x...` ou `0b...`, inclusive negativos.
+- Operandos de memória no formato `imm(reg)`, como `4(sp)`.
+- Desvios e `JAL` aceitam rótulo; o offset relativo é calculado automaticamente.
+- **Não há diretivas** (`.data`, `.word`, `.text`...): o código é composto apenas de instruções.
 
-| Grupo | Instruções |
+### Instruções suportadas
+
+| Formato | Instruções |
 |---|---|
-| Memória direta | `LODD`, `STOD`, `ADDD`, `SUBD` |
-| Memória local (SP) | `LODL`, `STOL`, `ADDL`, `SUBL` |
-| Desvios | `JPOS`, `JZER`, `JNEG`, `JNZE`, `JUMP`, `CALL` |
-| Imediato | `LOCO` |
-| Pilha | `PUSH`, `POP`, `PSHI`, `POPI` |
-| Outros | `RETN`, `SWAP`, `INSP`, `DESP` |
+| R | `ADD` `SUB` `SLL` `SLT` `SLTU` `XOR` `SRL` `SRA` `OR` `AND` |
+| I (ALU) | `ADDI` `SLTI` `SLTIU` `XORI` `ORI` `ANDI` `SLLI` `SRLI` `SRAI` |
+| I (load) | `LB` `LH` `LW` `LBU` `LHU` |
+| I (salto/sistema) | `JALR` `ECALL` `EBREAK` |
+| S | `SB` `SH` `SW` |
+| B | `BEQ` `BNE` `BLT` `BGE` `BLTU` `BGEU` |
+| U | `LUI` `AUIPC` |
+| J | `JAL` |
 
-### Exemplo de programa
+**Pseudoinstruções:** `NOP`, `MV`, `NOT`, `NEG`, `SEQZ`, `SNEZ`, `SLTZ`, `SGTZ`, `LI` (1 ou 2 instruções, conforme o valor), `J`, `JR`, `RET`, `BEQZ`, `BNEZ`, `BLEZ`, `BGEZ`, `BLTZ`, `BGTZ`, `BGT`, `BLE`, `BGTU`, `BLEU`.
+
+### Exemplo
 
 ```asm
-LOCO 10      ; AC ← 10
-STOD 100     ; MEM[100] ← AC
-LOCO 20      ; AC ← 20
-ADDD 100     ; AC ← AC + MEM[100]
-STOD 101     ; MEM[101] ← AC  (resultado: 30)
+        li   x1, 10
+        li   x2, 20
+        add  x3, x1, x2      # x3 = 30
+        sw   x3, 64(x0)      # MEM[64] = 30
+        lw   x4, 64(x0)      # x4 = 30
+        beq  x3, x4, fim     # desvio tomado
+        addi x5, x0, 99      # (pulada)
+fim:    addi x5, x0, 42      # x5 = 42
 ```
+
+Ao final da execução: `x3 = 30`, `x4 = 30`, `x5 = 42` e `MEM[64] = 30`.
+
+### Binários externos (`.bin`)
+
+O painel de memória importa um **binário bruto (flat binary, bare-metal)**, e não um `.elf`:
+
+```bash
+riscv64-unknown-elf-objcopy -O binary programa.elf programa.bin
+```
+
+Informe o endereço base (hex ou decimal) e use **Upload .bin**. A memória é limpa, os bytes são gravados em little-endian (`loadRawBinary`) e a unidade de controle recebe um `hardReset(base)`, que zera os registradores e aponta o PC para o endereço base. Lembre-se de que o binário precisa caber na RAM (128 bytes por padrão).
 
 ---
 
-## A Interface de Simulação (`src/`)
+## Interface (`src/`)
 
-### Layout principal (`App.jsx`)
+`App.jsx` tem dois botões no topo, **Simulador** e **Comparacao**, e um painel de **Log** disponível nas duas telas. O `MacContext` guarda qual processador está ativo.
 
-A tela é dividida em três painéis lado a lado:
+### Tela "Simulador"
+
+Três painéis lado a lado:
 
 ```
 ┌──────────┐  ┌────────────┐  ┌──────────────┐
@@ -127,78 +207,63 @@ A tela é dividida em três painéis lado a lado:
 └──────────┘  └────────────┘  └──────────────┘
 ```
 
----
+**Memory** (`src/components/memory/`) é o painel de controle:
+- **Clear**, **►**, **||**, campo **Tempo (ms)** e **Set Clock**.
+- **IPS Real**: instruções concluídas por segundo na máquina hospedeira, atualizado uma vez por segundo (`useIPS`).
+- **Importar Binário Real (.bin)** com endereço base e ajuda de toolchain.
+- Até **3 janelas** `MemoryDisplay`, abertas com `+` e fechadas com `×`. Cada uma atualiza a cada 100 ms, alterna entre **HEX / BIN / DEC**, carrega 100 linhas por vez e tem busca por endereço ou linha.
 
-### Painel Memory (`src/components/memory/`)
+**Simulation** (`src/components/SImulation/`):
+- Botões para escolher o processador: **RV32I (Datapath)** (`mac1`), **RV32I (Cache D)** (`mac2`) e **RV32I (Cache A)** (`mac3`), mais o campo de tamanho da cache.
+- Banco de registradores x0–x31 com formato alternável (no modo BIN mostra os 16 bits menos significativos).
+- Blocos do caminho de dados: Clock & FSM, etapa atual, mnemônico, formato/imediato, operação da FSM, PC, desvio (`TAKEN`/`NOT TAKEN`), próximo PC, MAR, MBR/MDR, RS1, RS2, operando A, ALU (com Z/N) e saída da ALU.
+- Tabela **Conteúdo da Cache** (mostra "Modo Direto" quando não há cache).
 
-É o painel de controle central da simulação. Contém:
+**Instructions** (`src/components/instructions/`): painel colapsável com um `textarea` para o Assembly e o botão **Montar Programa RV32I**. Erros de montagem aparecem em `alert()`, com a instrução problemática.
 
-**Botões de controle:**
-- `Clear` — limpa toda a RAM e reseta a UC e o Clock
-- `►` — chama `executa(clock, uc)`, iniciando a execução com velocidade de 250 ms/subciclo
-- `||` — chama `clock.pausar()`, suspendendo a execução sem perder estado
+**Log** (`src/components/simulationLog/`): lista até 500 eventos, os mais recentes primeiro: `[INSTRUCTION]`, `[MEMORY WRITE]` e, quando houver cache integrada, `[CACHE HIT]`/`[CACHE MISS]`.
 
-**Slots de visualização de memória:**
-Suporta até 4 instâncias do componente `MemoryDisplay` abertas simultaneamente. Cada slot pode ser aberto (`+`) ou fechado (`×`) independentemente.
+### Tela "Comparacao"
 
-```jsx
-// Estado que controla quais slots estão visíveis
-const [memoryNum, setMemoryNum] = useState([1, 0, 0, 0]);
-```
-
----
-
-### MemoryDisplay (`src/components/memory/memoryDisplay/`)
-
-Cada janela de memória exibe o conteúdo da RAM e se atualiza automaticamente a cada 100 ms via `setInterval`, refletindo em tempo real as escritas do processador:
-
-```js
-useEffect(() => {
-    const interval = setInterval(() => {
-        setData([...memoria.data]); // snapshot do array a cada 100ms
-    }, 100);
-    return () => clearInterval(interval);
-}, []);
-```
-
-**Funcionalidades:**
-- **Troca de base** — botão alterna entre binário (16 dígitos) e decimal
-- **Carregamento progressivo** — exibe 100 linhas por vez; botão `+` carrega mais 100
-- **Busca por endereço** — painel de settings aceita um número de linha e rola automaticamente até ela (`scrollIntoView`)
+Pensada para rodar o mesmo programa em três processadores lado a lado (cada um com sua própria cópia da memória) e comparar ciclos, CPI e acertos de cache. **No momento esta tela não abre**; veja o próximo tópico.
 
 ---
 
-### Painel Instructions (`src/components/instructions/`)
+## Estado atual e limitações conhecidas
 
-Painel colapsável ativado por um botão flutuante. Quando aberto, exibe o `InstructionDisplay`:
+- **A tela "Comparacao" está quebrada.** Ela falha ao renderizar porque o `performanceTracker` ainda monitora `MAC-1`/`MAC-2`/`MAC-3`, enquanto a página usa `RV32I`/`RV32I-C1`/`RV32I-C2`. Além disso, o laço dela executa 4 subciclos e a unidade de controle RV32I tem 5, então o Write-back nunca rodaria.
+- **`mac2` e `mac3` ainda não têm cache.** Ambos apenas estendem o `mac1` e expõem um `cacheSize` e um `getSnapshot()` vazio; por isso a tabela de cache aparece vazia. O protótipo em `mac2/componentes/cache.js` (write-through, blocos de 4 palavras, totalmente associativo, substituição FIFO, endereços de 16 bits) é herdado do MAC-1 e ainda não está conectado ao RV32I.
+- **Não há instrução de parada.** `ECALL`/`EBREAK` não encerram a execução: ao acabar o programa, o PC continua avançando sobre palavras zeradas até você pausar.
+- **A RAM padrão é pequena** (128 bytes); veja [Memória](#memória-mac1componentesmemoryjs).
+- `Header` e `StackMemoryDisplay` existem em `src/components/`, mas não são exibidos na interface atual.
 
-- **Textarea** para digitar o código Assembly
-- **Botão "Montar Programa"** que instancia o `Montador`, executa as três etapas de montagem e chama `montador.preencherMemoria()` para gravar o binário na RAM
-- Erros de montagem são exibidos via `alert()` com a linha problemática
+### Código legado (MAC-1)
+
+Os arquivos abaixo pertencem à versão anterior do projeto e **não são usados** pelo RV32I:
+
+- `mac1/componentes/`: `amux`, `cs`, `decoderA/B/C`, `increment`, `latchA/B`, `mar`, `mbr`, `mir`, `mmux`, `mpc`, `msl` e `shifter`.
+- `mac2/componentes/cs.js`, `mac3/componentes/cs.js` e `mac3/componentes/decoderI.js`.
+- `mac1/manual/`: tabela de macroinstruções e microprograma do MAC-1, mantida como referência histórica.
 
 ---
 
-### Painel Simulation (`src/components/SImulation/`)
+## Testes
 
-Reservado para a visualização gráfica futura do datapath (5 divs posicionadas via CSS, correspondendo aos blocos visuais do processador MAC-1).
-
----
-
-## Como Executar
+Não há test runner configurado: os testes são scripts Node que lançam erro se uma asserção falhar. Execute-os na raiz do projeto:
 
 ```bash
-npm install
-npm run dev
+node testes/testeRiscV.js
 ```
 
-Acesse `http://localhost:5173`. O fluxo de uso é:
-
-1. Abrir o painel **Instructions** e digitar o código Assembly
-2. Clicar em **Montar Programa** — o código é compilado e gravado na RAM
-3. Abrir uma janela de **MemoryDisplay** para inspecionar a memória
-4. Clicar em **►** para iniciar a execução
-5. Usar **||** para pausar e inspecionar o estado intermediário
-6. Usar **Clear** para reiniciar tudo
+| Script | O que cobre | Situação |
+|---|---|---|
+| `testeRiscV.js` | Registradores, memória little-endian, ALU, montador e execução com `BEQ` | Passa |
+| `testeBateriaCompleta.js` | Bateria da ISA: `LUI`/`AUIPC`, aritmética, shifts, loads/stores, desvios, `JAL`/`JALR` | Passa |
+| `testeBinaryLoader.js` | Carregamento de `.bin` e endereço base arbitrário | Passa |
+| `testeIPS.js` | `formatIPS` e contador de instruções (importa React; rode `npm install` antes) | Passa |
+| `testeAlu.js` | Imprime resultados e flags da ALU (sem asserções) | Roda |
+| `teste.js`, `teste2.js`, `teste.txt` | Programas do MAC-1 em binário de 16 bits | Legado |
+| `regressaoMac2.js` | Regressão do MAC-2 | Legado (falha: depende do `mpc` do MAC-1) |
 
 ---
 
@@ -206,16 +271,7 @@ Acesse `http://localhost:5173`. O fluxo de uso é:
 
 | Pacote | Versão | Papel |
 |---|---|---|
-| react | ^19 | UI reativa |
-| vite | ^8 | Bundler/dev server |
-| @vitejs/plugin-react | ^6 | Suporte JSX com Oxc |
-)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| `react` / `react-dom` | ^19.2 | Interface |
+| `vite` | ^8.0 | Bundler e servidor de desenvolvimento |
+| `@vitejs/plugin-react` | ^6.0 | Suporte a JSX |
+| `eslint` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` | ^10.3 / ^7.1 / ^0.5 | Lint |
