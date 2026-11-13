@@ -1,71 +1,144 @@
-// Arithmetic Logic Unit - Unidade Lógica e Aritmética (ALU)
+// Arithmetic Logic Unit - Unidade Lógica e Aritmética (ALU) do RISC-V RV32I
+// Implementa as operações inteiras de 32 bits:
+// ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+// Gera flags Z (Zero) e N (Negativo) e suporta avaliação de desvios condicionais
 
-// Descrição: Responsável por realizar operações matemáticas (soma, subtração) e lógicas (AND, NOT).
-// Recebe: Operandos vindos do Registrador Amux (fixo na esquerda), latch B (na direita) e os sinais de controle do MIR.
-// Envia: O resultado da operação para o Deslocador.
-
-
-class ArithmeticLogicUnit {
+export class ArithmeticLogicUnit {
     constructor() {
-        this.amux = "0000000000000000";
-        this.latchb = "0000000000000000";
-        this.mir = "00";
-        this.res = "0000000000000000";
-        this.Z = 0; // 1 se o resultado for zero
-        this.N = 0; // 1 se o resultado for negativo
+        this.a = 0;       // Operando A (32-bit int)
+        this.b = 0;       // Operando B (32-bit int)
+        this.op = "ADD";  // Operação
+        this.res = "00000000000000000000000000000000";
+        this.resInt = 0;
+        this.Z = 1;       // 1 se o resultado for zero
+        this.N = 0;       // 1 se o resultado for negativo (bit 31 = 1)
     }
 
-    // Recebe os valores da AMUX, latchB e MIR
-    write(amux, latchb, mir) {
-        this.amux = amux;
-        this.latchb = latchb;
-        this.mir = mir;
+    // Normaliza operando de entrada (aceita número ou string binária/hex)
+    normalizeInput(val) {
+        if (typeof val === "number") return val | 0;
+        if (typeof val === "string") {
+            if (val.startsWith("0x") || val.startsWith("0X")) {
+                return parseInt(val, 16) | 0;
+            }
+            if (/^[01]+$/.test(val)) {
+                return parseInt(val, 2) | 0;
+            }
+            return parseInt(val, 10) | 0;
+        }
+        return 0;
     }
 
+    // Recebe operandos e operação
+    write(a, b, op = "ADD") {
+        this.a = this.normalizeInput(a);
+        this.b = this.normalizeInput(b);
+        this.op = String(op).toUpperCase().trim();
+    }
+
+    // Executa a operação configurada
     calcular() {
-        let resArray = new Array(16).fill("0");
-        switch (this.mir) {
-            case "00": // A + B
-                let carry = 0;
-                for (let i = 15; i >= 0; i--) {
-                    carry += (this.amux[i] == "1") ? 1 : 0;
-                    carry += (this.latchb[i] == "1") ? 1 : 0;
+        const a = this.a;
+        const b = this.b;
+        const shamt = b & 0x1F; // RISC-V shifts usam apenas os 5 bits inferiores
+        let result = 0;
 
-                    switch (carry) {
-                        case 0: resArray[i] = "0"; break;
-                        case 1: resArray[i] = "1"; carry = 0; break;
-                        case 2: resArray[i] = "0"; carry = 1; break;
-                        case 3: resArray[i] = "1"; carry = 1; break;
-                    }
-                }
+        switch (this.op) {
+            case "ADD":
+            case "00": // compatibilidade com códigos antigos
+                result = (a + b) | 0;
                 break;
 
-            case "01": // A AND B
-                for (let i = 0; i < 16; i++) {
-                    resArray[i] = (this.amux[i] == "1" && this.latchb[i] == "1") ? "1" : "0";
-                }
+            case "SUB":
+                result = (a - b) | 0;
                 break;
 
-            case "10": // A
-                resArray = this.amux.split("");
+            case "SLL": // Shift Left Logical
+                result = (a << shamt) | 0;
                 break;
 
-            case "11": // NOT(A)
-                for (let i = 0; i < 16; i++) {
-                    resArray[i] = (this.amux[i] == "1") ? "0" : "1";
-                }
+            case "SLT": // Set Less Than (signed)
+                result = (a < b) ? 1 : 0;
+                break;
+
+            case "SLTU": // Set Less Than Unsigned
+                result = ((a >>> 0) < (b >>> 0)) ? 1 : 0;
+                break;
+
+            case "XOR":
+                result = (a ^ b) | 0;
+                break;
+
+            case "SRL": // Shift Right Logical
+                result = (a >>> shamt) | 0;
+                break;
+
+            case "SRA": // Shift Right Arithmetic
+                result = (a >> shamt) | 0;
+                break;
+
+            case "OR":
+                result = (a | b) | 0;
+                break;
+
+            case "AND":
+            case "01": // compatibilidade
+                result = (a & b) | 0;
+                break;
+
+            case "PASS_A":
+            case "10": // compatibilidade
+                result = a;
+                break;
+
+            case "NOT_A":
+            case "11": // compatibilidade
+                result = (~a) | 0;
+                break;
+
+            default:
+                result = (a + b) | 0;
                 break;
         }
 
-        this.res = resArray.join("");
+        this.resInt = result | 0;
+        this.res = (this.resInt >>> 0).toString(2).padStart(32, "0");
+        this.Z = (this.resInt === 0) ? 1 : 0;
+        this.N = (this.resInt < 0) ? 1 : 0;
 
-        this.Z = (this.res == "0000000000000000") ? 1 : 0;
-        this.N = (this.res[0] == "1") ? 1 : 0;
+        return this.resInt;
     }
 
-    // Envia para o Deslocador ou MSL
-    read(regName) {
-        return this[regName];
+    // Testa condição para instruções de Branch (B-Type)
+    testBranchCondition(branchOp, valA, valB) {
+        const a = this.normalizeInput(valA);
+        const b = this.normalizeInput(valB);
+
+        switch (branchOp.toUpperCase()) {
+            case "BEQ":
+                return a === b;
+            case "BNE":
+                return a !== b;
+            case "BLT":
+                return a < b; // signed
+            case "BGE":
+                return a >= b; // signed
+            case "BLTU":
+                return (a >>> 0) < (b >>> 0); // unsigned
+            case "BGEU":
+                return (a >>> 0) >= (b >>> 0); // unsigned
+            default:
+                return false;
+        }
+    }
+
+    // Leitura compatível
+    read(field) {
+        if (field === "res") return this.res;
+        if (field === "resInt") return this.resInt;
+        if (field === "Z") return this.Z;
+        if (field === "N") return this.N;
+        return this[field];
     }
 }
 

@@ -2,6 +2,7 @@ import {
     resetPerformanceTracker,
     trackInstructionStart,
 } from "./performanceTracker.js";
+import { ABI_NAMES } from "../../mac1/componentes/registers.js";
 
 const MAX_LOG_EVENTS = 500;
 
@@ -14,38 +15,6 @@ const LOG_LABELS = {
     instructionFinished: "[INSTRUCTION FINISHED]",
 };
 
-const OPCODES_12_BITS = {
-    "0000": "LODD",
-    "0001": "STOD",
-    "0010": "ADDD",
-    "0011": "SUBD",
-    "0100": "JPOS",
-    "0101": "JZER",
-    "0110": "JUMP",
-    "0111": "LOCO",
-    "1000": "LODL",
-    "1001": "STOL",
-    "1010": "ADDL",
-    "1011": "SUBL",
-    "1100": "JNEG",
-    "1101": "JNZE",
-    "1110": "CALL",
-};
-
-const OPCODES_FIXED = {
-    "11110000": "PSHI",
-    "11110010": "POPI",
-    "11110100": "PUSH",
-    "11110110": "POP",
-    "11111000": "RETN",
-    "11111010": "SWAP",
-};
-
-const OPCODES_8_BITS = {
-    "11111100": "INSP",
-    "11111110": "DESP",
-};
-
 let events = [];
 let nextId = 1;
 let subscribers = new Set();
@@ -53,7 +22,7 @@ let instructionCatalog = new Map();
 let lastInstructionLogKey = null;
 
 function normalizeBinaryWord(value) {
-    return String(value ?? "").padStart(16, "0").slice(-16);
+    return String(value ?? "").padStart(32, "0").slice(-32);
 }
 
 function normalizeAddress(address) {
@@ -76,6 +45,10 @@ function formatInstruction(instruction) {
         return null;
     }
 
+    if (instruction.operands && Array.isArray(instruction.operands)) {
+        return `${instruction.opcode} ${instruction.operands.join(", ")}`;
+    }
+
     if (instruction.operando === null || instruction.operando === undefined) {
         return instruction.opcode;
     }
@@ -85,29 +58,81 @@ function formatInstruction(instruction) {
 
 function decodeInstructionWord(word) {
     const binaryWord = normalizeBinaryWord(word);
-    const opcode4 = binaryWord.slice(0, 4);
-    const opcode8 = binaryWord.slice(0, 8);
+    const intVal = parseInt(binaryWord, 2) | 0;
+    if (intVal === 0) return { opcode: "NOP", operando: null };
 
-    if (OPCODES_12_BITS[opcode4]) {
-        return {
-            opcode: OPCODES_12_BITS[opcode4],
-            operando: parseInt(binaryWord.slice(4), 2),
-        };
+    const opcode = intVal & 0x7F;
+    const rd = (intVal >>> 7) & 0x1F;
+    const funct3 = (intVal >>> 12) & 0x07;
+    const rs1 = (intVal >>> 15) & 0x1F;
+    const rs2 = (intVal >>> 20) & 0x1F;
+    const funct7 = (intVal >>> 25) & 0x7F;
+    const immI = (intVal >> 20);
+
+    const rdName = `x${rd} (${ABI_NAMES[rd] || ""})`;
+    const rs1Name = `x${rs1} (${ABI_NAMES[rs1] || ""})`;
+    const rs2Name = `x${rs2} (${ABI_NAMES[rs2] || ""})`;
+
+    if (opcode === 0x33) {
+        let op = "ADD";
+        if (funct3 === 0x0) op = funct7 === 0x20 ? "SUB" : "ADD";
+        else if (funct3 === 0x1) op = "SLL";
+        else if (funct3 === 0x2) op = "SLT";
+        else if (funct3 === 0x3) op = "SLTU";
+        else if (funct3 === 0x4) op = "XOR";
+        else if (funct3 === 0x5) op = funct7 === 0x20 ? "SRA" : "SRL";
+        else if (funct3 === 0x6) op = "OR";
+        else if (funct3 === 0x7) op = "AND";
+        return { opcode: op, operando: `${rdName}, ${rs1Name}, ${rs2Name}` };
     }
 
-    if (OPCODES_FIXED[opcode8]) {
-        return {
-            opcode: OPCODES_FIXED[opcode8],
-            operando: null,
-        };
+    if (opcode === 0x13) {
+        let op = "ADDI";
+        if (funct3 === 0x0) op = "ADDI";
+        else if (funct3 === 0x1) op = "SLLI";
+        else if (funct3 === 0x2) op = "SLTI";
+        else if (funct3 === 0x3) op = "SLTIU";
+        else if (funct3 === 0x4) op = "XORI";
+        else if (funct3 === 0x5) op = funct7 === 0x20 ? "SRAI" : "SRLI";
+        else if (funct3 === 0x6) op = "ORI";
+        else if (funct3 === 0x7) op = "ANDI";
+        return { opcode: op, operando: `${rdName}, ${rs1Name}, ${immI}` };
     }
 
-    if (OPCODES_8_BITS[opcode8]) {
-        return {
-            opcode: OPCODES_8_BITS[opcode8],
-            operando: parseInt(binaryWord.slice(8), 2),
-        };
+    if (opcode === 0x03) {
+        let op = "LW";
+        if (funct3 === 0x0) op = "LB";
+        else if (funct3 === 0x1) op = "LH";
+        else if (funct3 === 0x2) op = "LW";
+        else if (funct3 === 0x4) op = "LBU";
+        else if (funct3 === 0x5) op = "LHU";
+        return { opcode: op, operando: `${rdName}, ${immI}(${rs1Name})` };
     }
+
+    if (opcode === 0x23) {
+        const immS = (((intVal >> 25) << 5) | ((intVal >>> 7) & 0x1F) << 20) >> 20;
+        let op = "SW";
+        if (funct3 === 0x0) op = "SB";
+        else if (funct3 === 0x1) op = "SH";
+        else if (funct3 === 0x2) op = "SW";
+        return { opcode: op, operando: `${rs2Name}, ${immS}(${rs1Name})` };
+    }
+
+    if (opcode === 0x63) {
+        let op = "BEQ";
+        if (funct3 === 0x0) op = "BEQ";
+        else if (funct3 === 0x1) op = "BNE";
+        else if (funct3 === 0x4) op = "BLT";
+        else if (funct3 === 0x5) op = "BGE";
+        else if (funct3 === 0x6) op = "BLTU";
+        else if (funct3 === 0x7) op = "BGEU";
+        return { opcode: op, operando: `${rs1Name}, ${rs2Name}` };
+    }
+
+    if (opcode === 0x37) return { opcode: "LUI", operando: `${rdName}, 0x${((intVal >>> 12) & 0xFFFFF).toString(16)}` };
+    if (opcode === 0x17) return { opcode: "AUIPC", operando: `${rdName}, 0x${((intVal >>> 12) & 0xFFFFF).toString(16)}` };
+    if (opcode === 0x6F) return { opcode: "JAL", operando: `${rdName}` };
+    if (opcode === 0x67) return { opcode: "JALR", operando: `${rdName}, ${rs1Name}, ${immI}` };
 
     return null;
 }
@@ -129,8 +154,8 @@ function addLogEvent(type, message, metadata = {}) {
         }),
     };
 
-    nextId++;
-    events = [...events, event].slice(-MAX_LOG_EVENTS);
+    nextId += 1;
+    events = [event, ...events].slice(0, MAX_LOG_EVENTS);
     notifySubscribers();
 }
 
@@ -143,119 +168,96 @@ export function subscribeToSimulationLog(callback) {
     };
 }
 
-export function getSimulationLog() {
-    return [...events];
-}
-
 export function clearSimulationLog() {
     events = [];
+    nextId = 1;
     lastInstructionLogKey = null;
     resetPerformanceTracker();
     notifySubscribers();
 }
 
-export function registerMacroInstructions(macroinstrucoes) {
-    instructionCatalog = new Map();
-
-    macroinstrucoes
-        .filter((instruction) => instruction.opcode !== null)
-        .forEach((instruction) => {
-            instructionCatalog.set(Number(instruction.rotulo_index), {
-                opcode: instruction.opcode,
-                operando: instruction.operando,
-            });
-        });
-}
-
 export function clearMacroInstructionCatalog() {
-    instructionCatalog = new Map();
+    instructionCatalog.clear();
     lastInstructionLogKey = null;
     resetPerformanceTracker();
 }
 
-export function logMemoryWrite(address, previousValue, nextValue) {
+export function registerMacroInstructions(instructions = []) {
+    instructionCatalog.clear();
+
+    instructions.forEach((instruction, index) => {
+        const address =
+            instruction.byteAddress ??
+            instruction.rotulo_index ??
+            instruction.address ??
+            (index * 4);
+
+        if (address !== null && address !== undefined) {
+            instructionCatalog.set(normalizeAddress(address), instruction);
+        }
+    });
+}
+
+export function logInstructionExecution(address, details = {}) {
+    const normalizedAddress = normalizeAddress(address);
+    const executionKey = details.executionKey ?? `${details.processor ?? "CPU"}:${normalizedAddress}`;
+
+    if (lastInstructionLogKey === executionKey) {
+        return;
+    }
+
+    lastInstructionLogKey = executionKey;
+
+    const catalogInstruction = instructionCatalog.get(normalizedAddress);
+    const decodedInstruction = catalogInstruction
+        ? null
+        : decodeInstructionWord(details.word);
+    const instruction = catalogInstruction ?? decodedInstruction;
+    const formattedInstruction = formatInstruction(instruction);
+
+    const description = formattedInstruction
+        ? `Executando: ${formattedInstruction}`
+        : `Executando instrução no endereço 0x${normalizedAddress.toString(16).toUpperCase()}`;
+
+    trackInstructionStart(details.processor ?? "RV32I", {
+        address: normalizedAddress,
+        cycle: details.cycle,
+        instruction: formattedInstruction,
+        cacheHits: details.cacheHits,
+        cacheMisses: details.cacheMisses,
+    });
+
+    addLogEvent("instruction", description, {
+        address: normalizedAddress,
+        cycle: details.cycle,
+        processor: details.processor,
+        instruction: formattedInstruction,
+        opcode: instruction?.opcode,
+        operando: instruction?.operando ?? instruction?.imm,
+    });
+}
+
+export function logMemoryWrite(address, previousValue, value) {
     const normalizedAddress = normalizeAddress(address);
     addLogEvent(
         "memoryWrite",
-        `Endereço ${normalizedAddress} alterado de ${previousValue} para ${nextValue}`,
+        `RAM[0x${normalizedAddress.toString(16).toUpperCase()}]: ${previousValue} -> ${value}`,
         {
             address: normalizedAddress,
             previousValue,
-            nextValue,
+            value,
         },
     );
 }
 
-export function logCacheHit(address) {
-    const normalizedAddress = normalizeAddress(address);
-    addLogEvent("cacheHit", `Endereço ${normalizedAddress}`, {
-        address: normalizedAddress,
-    });
+export function logCacheHit(processor, address) {
+    addLogEvent("cacheHit", `${processor}: Hit no endereço 0x${normalizeAddress(address).toString(16).toUpperCase()}`);
 }
 
-export function logCacheMiss(address) {
-    const normalizedAddress = normalizeAddress(address);
-    addLogEvent("cacheMiss", `Endereço ${normalizedAddress}`, {
-        address: normalizedAddress,
-    });
+export function logCacheMiss(processor, address) {
+    addLogEvent("cacheMiss", `${processor}: Miss no endereço 0x${normalizeAddress(address).toString(16).toUpperCase()}`);
 }
 
-export function logInstructionExecution(address, options = {}) {
-    const normalizedAddress = normalizeAddress(address);
-    const word = options.word;
-    const instruction =
-        options.instruction ??
-        instructionCatalog.get(Number(normalizedAddress)) ??
-        (word ? decodeInstructionWord(word) : null);
-    const instructionText = formatInstruction(instruction);
-
-    if (!instructionText) {
-        return;
-    }
-
-    const processor = options.processor ?? "MAC";
-    const logKey = `${processor}:${options.executionKey ?? ""}:${normalizedAddress}:${instructionText}`;
-
-    if (logKey === lastInstructionLogKey) {
-        return;
-    }
-
-    lastInstructionLogKey = logKey;
-    const telemetry = trackInstructionStart({
-        processor,
-        address: normalizedAddress,
-        instruction,
-        instructionText,
-        cycle: options.cycle,
-        cacheHits: options.cacheHits,
-        cacheMisses: options.cacheMisses,
-    });
-
-    if (telemetry.finished) {
-        addLogEvent(
-            "instructionFinished",
-            `${telemetry.finished.instructionText} concluida em ${telemetry.finished.cycles} ciclo(s)`,
-            {
-                address: telemetry.finished.address,
-                processor,
-                instruction: telemetry.finished.instruction,
-                instructionText: telemetry.finished.instructionText,
-                startCycle: telemetry.finished.startCycle,
-                endCycle: telemetry.finished.endCycle,
-                cycles: telemetry.finished.cycles,
-            },
-        );
-    }
-
-    addLogEvent(
-        "instructionStarted",
-        `Executando ${instructionText}`,
-        {
-            address: normalizedAddress,
-            processor,
-            instruction,
-            instructionText,
-            startCycle: telemetry.started.startCycle,
-        },
-    );
+export function getSimulationLog() {
+    return [...events];
 }

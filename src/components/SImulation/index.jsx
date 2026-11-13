@@ -1,8 +1,9 @@
-import styles from './styles.module.css'
-import { useEffect, useState } from 'react'
+import styles from './styles.module.css';
+import { useEffect, useState } from 'react';
 import { uc1, uc2, uc3 } from "../../../testes/teste3";
 import ALU from './ALU';
 import { useMac } from '../../context/MacContext';
+import { ABI_NAMES } from '../../../mac1/componentes/registers';
 
 const DEFAULT_CACHE_SIZE = 3;
 const CONTROL_UNITS = {
@@ -28,27 +29,26 @@ function formatCacheCell(value) {
 
 const estadoInicial = {
     subciclo: 1, ciclos: 0,
-    mir: '-', mpc: '0',
-    mar: '0', mbr: '0',
-    aluRes: '0', aluZ: '0', aluN: '0',
-    latA: '0', latB: '0',
-    amux: '0', shifter: '0',
-    mmux: '0', msl: '0',
-    pc: '0', ac: '0', sp: '0', ir: '0', tir: '0',
-    
-
-    //novos
-    zero: '0', um: '0', menosUm: '0', am: '0', sm: '0',
-    regA: '0', regB: '0', regC: '0', regD: '0', regE: '0', regF: '0',
-    
-    decA: '0', decB: '0', decC: '0'
-    
+    stage: 'FETCH',
+    mir: 'FETCH', mpc: 'NOP',
+    mar: '0x00000000', mbr: '0x00000000',
+    aluRes: '0x00000000', aluZ: 1, aluN: 0,
+    latA: '0x00000000', latB: '0x00000000',
+    amux: '0x00000000', shifter: '0x00000000',
+    mmux: 'PC+4', msl: 'NOT TAKEN',
+    pc: '0x00000000',
+    opcodeName: 'NOP',
+    format: 'I-Type',
+    rd: 'x0 (zero)',
+    rs1: 'x0 (zero)',
+    rs2: 'x0 (zero)',
+    imm: '0x00000000',
+    registersList: []
 };
 
 function COMPONENTE({ label, value, className }) {
     return (
-        <div
-            className={`${styles.componente} ${className || ""}`}>
+        <div className={`${styles.componente} ${className || ""}`}>
             <header className={styles.label}>
                 {label}
             </header>
@@ -59,38 +59,55 @@ function COMPONENTE({ label, value, className }) {
     );
 }
 
+function BancoDeRegistradores({ estado }) {
+    const [displayBase, setDisplayBase] = useState("hex"); // "hex", "dec", "bin"
 
-function BancoDeRegistradores({ estado , customStyle}) {
-    const listaRegistradores = [
-        { id: 'pc', label: 'PC' },
-        { id: 'ac', label: 'AC' },
-        { id: 'sp', label: 'SP' },
-        { id: 'ir', label: 'IR' },
-        { id: 'tir', label: 'TIR' },
-        { id: 'zero', label: 'ZERO' },
-        { id: 'um', label: 'UM' },
-        { id: 'menosUm', label: '-1' },
-        { id: 'am', label: 'AMASK' },
-        { id: 'sm', label: 'SMASK' },
-        { id: 'regA', label: 'REG A' },
-        { id: 'regB', label: 'REG B' },
-        { id: 'regC', label: 'REG C' },
-        { id: 'regD', label: 'REG D' },
-        { id: 'regE', label: 'REG E' },
-        { id: 'regF', label: 'REG F' }
-    ];
+    // Se temos a lista rica de registradores com metadados
+    const regs = estado.registersList && estado.registersList.length === 32
+        ? estado.registersList
+        : Array.from({ length: 32 }, (_, i) => ({
+            index: i,
+            name: `x${i}`,
+            abi: ABI_NAMES[i],
+            label: `x${i} (${ABI_NAMES[i]})`,
+            bin: estado[`x${i}`] || "00000000000000000000000000000000",
+            hex: estado[`x${i}`] ? `0x${parseInt(estado[`x${i}`], 2).toString(16).padStart(8, '0').toUpperCase()}` : "0x00000000",
+            dec: estado[`x${i}`] ? parseInt(estado[`x${i}`], 2) | 0 : 0
+        }));
+
+    function getRegDisplayValue(reg) {
+        if (displayBase === "hex") return reg.hex;
+        if (displayBase === "dec") return reg.dec;
+        return reg.bin.slice(-16); // exibe os 16 bits inferiores no modo bin para caber melhor na célula
+    }
+
+    function toggleBase() {
+        if (displayBase === "hex") setDisplayBase("dec");
+        else if (displayBase === "dec") setDisplayBase("bin");
+        else setDisplayBase("hex");
+    }
+
     return (
         <div className={styles.banco}>
-            <div className={styles.tituloBanco} >Banco de Registradores</div>
-            
+            <div className={styles.tituloBanco}>
+                <span>Registradores RV32I (x0 - x31)</span>
+                <button
+                    className={styles.baseToggleBtn}
+                    onClick={toggleBase}
+                    title="Alternar entre Hexadecimal, Decimal e Binário"
+                >
+                    Formato: {displayBase.toUpperCase()}
+                </button>
+            </div>
+
             <div className={styles.registradoresGrid}>
-                {listaRegistradores.map((reg) => (
-                    <div key={reg.id} className={styles.regItem}>
+                {regs.map((reg) => (
+                    <div key={reg.index} className={styles.regItem}>
                         <div className={styles.regLabel}>
-                            {reg.label}
+                            {reg.name} ({reg.abi})
                         </div>
                         <div className={styles.regValue}>
-                            {estado[reg.id]}
+                            {getRegDisplayValue(reg)}
                         </div>
                     </div>
                 ))}
@@ -100,14 +117,14 @@ function BancoDeRegistradores({ estado , customStyle}) {
 }
 
 function CacheContent({ snapshot }) {
-    const hasCache = Array.isArray(snapshot);
+    const hasCache = Array.isArray(snapshot) && snapshot.length > 0;
 
     return (
         <section className={styles.cachePanel}>
-            <h2>Conteudo da Cache</h2>
+            <h2>Conteúdo da Cache</h2>
 
             {!hasCache ? (
-                <div className={styles.cacheUnavailable}>Cache nao disponivel</div>
+                <div className={styles.cacheUnavailable}>Modo Direto RV32I (Cache desativada ou não configurada)</div>
             ) : (
                 <div className={styles.cacheTableWrapper}>
                     <table className={styles.cacheTable}>
@@ -115,7 +132,7 @@ function CacheContent({ snapshot }) {
                             <tr>
                                 <th>Linha</th>
                                 <th>V</th>
-                                <th>Endereco</th>
+                                <th>Endereço</th>
                                 <th>Valor</th>
                             </tr>
                         </thead>
@@ -158,15 +175,15 @@ export default function Simulation() {
     }, [activeMac]);
 
     useEffect(() => {
-        uc2.setCacheSize(cacheSize);
-        uc3.setCacheSize(cacheSize);
+        if (uc2.setCacheSize) uc2.setCacheSize(cacheSize);
+        if (uc3.setCacheSize) uc3.setCacheSize(cacheSize);
     }, [cacheSize]);
 
     useEffect(() => {
         setCacheSnapshot(readCacheSnapshot(CONTROL_UNITS[activeMac]));
     }, [activeMac, cacheSize]);
 
-    // Polling: garante que qualquer escrita no cache (inclusive manual) reflita na UI
+    // Polling de sincronização
     useEffect(() => {
         const uc = CONTROL_UNITS[activeMac];
         if (!uc) return;
@@ -183,21 +200,21 @@ export default function Simulation() {
                     onClick={() => setActiveMac("mac1")}
                     className={`${styles.botao} ${activeMac === "mac1" ? styles.ativo : ""}`}
                 >
-                    Mac 1
+                    RV32I (Datapath)
                 </button>
 
                 <button
                     onClick={() => setActiveMac("mac2")}
                     className={`${styles.botao} ${activeMac === "mac2" ? styles.ativo : ""}`}
                 >
-                    Mac 2
+                    RV32I (Cache D)
                 </button>
 
                 <button
                     onClick={() => setActiveMac("mac3")}
                     className={`${styles.botao} ${activeMac === "mac3" ? styles.ativo : ""}`}
                 >
-                    Mac 3
+                    RV32I (Cache A)
                 </button>
                 <label className={styles.cacheControl}>
                     <span>Cache</span>
@@ -213,66 +230,102 @@ export default function Simulation() {
                     />
                 </label>
             </div>
+
             <div className={styles.simulation}>
-
                 <BancoDeRegistradores estado={estado}/>
-            
-                <COMPONENTE label="Clock" value={`Ciclos : ${estado.ciclos} |  Subciclo : ${estado.subciclo}`} className={styles.clock}/>
-                <COMPONENTE label="DEC A" value={estado.decA} className={styles.decA} />
-                <COMPONENTE label="DEC B" value={estado.decB} className={styles.decB} />
-                <COMPONENTE label="DEC C" value={estado.decC} className={styles.decC} />
 
-                <COMPONENTE label="MIR" value={estado.mir} className={styles.mir}/>
-                
-                <COMPONENTE label="MPC" value={estado.mpc} className={styles.mpc}/>
-                <COMPONENTE label="MSL" value={estado.msl} className={styles.msl}/>
-                <COMPONENTE label="MMUX" value={estado.mmux} className={styles.mmux}/>
-                
-                <COMPONENTE label = "Control Store" value="256 x 32" className={styles.controlStore}/>
-                
-                <COMPONENTE label="MAR" value={estado.mar} className={styles.mar}/>
-                <COMPONENTE label="MBR" value={estado.mbr} className={styles.mbr}/>
-                <COMPONENTE label="Latch A" value={estado.latA} className={styles.latchA}/>
-                <COMPONENTE label="Latch B" value={estado.latB} className={styles.latchB}/>
-                <COMPONENTE label="AMUX" value={estado.amux} className={styles.amux}/>
-                <ALU label="ULA" value={`${estado.aluRes} (Z=${estado.aluZ} N=${estado.aluN})`} className={styles.alu}/>
-                <COMPONENTE label="Shifter" value={estado.shifter} className={styles.shifter}/>
+                <COMPONENTE
+                    label="Clock & FSM"
+                    value={`Ciclos: ${estado.ciclos} | Subciclo: ${estado.subciclo}`}
+                    className={styles.clock}
+                />
 
+                <COMPONENTE
+                    label="Etapa Atual"
+                    value={estado.stage || estado.mir}
+                    className={styles.decA}
+                />
+
+                <COMPONENTE
+                    label="Mnemônico"
+                    value={estado.opcodeName || estado.mpc}
+                    className={styles.decB}
+                />
+
+                <COMPONENTE
+                    label="Formato / Imm"
+                    value={`${estado.format || "-"} | ${estado.imm || "0"}`}
+                    className={styles.decC}
+                />
+
+                <COMPONENTE
+                    label="Operação FSM"
+                    value={estado.micro || estado.mir}
+                    className={styles.mir}
+                />
+
+                <COMPONENTE
+                    label="PC"
+                    value={estado.pc}
+                    className={styles.mpc}
+                />
+
+                <COMPONENTE
+                    label="Desvio (Branch)"
+                    value={estado.msl}
+                    className={styles.msl}
+                />
+
+                <COMPONENTE
+                    label="Próximo PC"
+                    value={estado.mmux}
+                    className={styles.mmux}
+                />
+
+                <COMPONENTE
+                    label="MAR (Endereço RAM)"
+                    value={estado.mar}
+                    className={styles.mar}
+                />
+
+                <COMPONENTE
+                    label="MBR / MDR (Dados RAM)"
+                    value={estado.mbr}
+                    className={styles.mbr}
+                />
+
+                <COMPONENTE
+                    label="RS1 (Dado A)"
+                    value={estado.latA}
+                    className={styles.latchA}
+                />
+
+                <COMPONENTE
+                    label="RS2 (Dado B)"
+                    value={estado.latB}
+                    className={styles.latchB}
+                />
+
+                <COMPONENTE
+                    label="Operando A (ALU)"
+                    value={estado.amux}
+                    className={styles.amux}
+                />
+
+                <ALU
+                    label="ALU RV32I"
+                    value={`${estado.aluRes} (Z=${estado.aluZ} N=${estado.aluN})`}
+                    className={styles.alu}
+                />
+
+                <COMPONENTE
+                    label="ALU Out / WB"
+                    value={estado.shifter}
+                    className={styles.shifter}
+                />
             </div>
+
             <CacheContent snapshot={cacheSnapshot} />
         </div>
     );
 }
-
-{/* 
-            <header>
-                <h1>Ciclos: {estado.ciclos} — Subciclo: {estado.subciclo}</h1>
-            </header>
-
-            <section>
-                <h2>Controle</h2>
-                <p>MIR: {estado.mir}</p>
-                <p>MPC: {estado.mpc}</p>
-                <p>MSL: {estado.msl}</p>
-                <p>MMUX: {estado.mmux}</p>
-            </section>
-
-            <section>
-                <h2>Registradores</h2>
-                <p>PC:  {estado.pc}</p>
-                <p>AC:  {estado.ac}</p>
-                <p>IR:  {estado.ir}</p>
-                <p>TIR: {estado.tir}</p>
-                <p>MAR: {estado.mar}</p>
-                <p>MBR: {estado.mbr}</p>
-            </section>
-
-            <section>
-                <h2>Caminho de dados</h2>
-                <p>Latch A: {estado.latA}</p>
-                <p>Latch B: {estado.latB}</p>
-                <p>AMUX:    {estado.amux}</p>
-                <p>ALU:     {estado.aluRes} (Z={estado.aluZ} N={estado.aluN})</p>
-                <p>Shifter: {estado.shifter}</p>
-            </section>
-             */}

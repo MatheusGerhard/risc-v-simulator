@@ -148,3 +148,35 @@
   margin: 0;
   -webkit-appearance: none;
 }
+
+.ipsDisplay {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    border: 1px solid var(--blue-600);
+    border-radius: 8px;
+    padding: 4px 10px;
+    height: 50px;
+    min-width: 90px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    user-select: none;
+}
+
+.ipsLabel {
+    font-size: 10px;
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700;
+    color: #93c5fd;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ipsValue {
+    font-size: 15px;
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 800;
+    color: #38bdf8;
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}

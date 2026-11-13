@@ -1,0 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700;900&display=swap');
+
+.memory {
+    width: 100%;
+    height: 100%;
+    border: 1px solid #1d1d1d;
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+    font-family: 'Roboto Mono', monospace;
+    background-color: #252526;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    align-items: center;
+    padding: clamp(4px, 0.5vw, 10px) clamp(8px, 1vw, 16px);
+    background: linear-gradient(135deg, #1e1b4b, #3730a3);
+    border-bottom: 1px solid #4338ca;
+}
+
+.headerButtons {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.titleArea {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.title {
+    color: #ffffff;
+    font-size: clamp(0.75rem, 0.9vw, 1rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.spBadgeHeader {
+    background: #4f46e5;
+    color: #e0e7ff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    border: 1px solid #6366f1;
+}
+
+.button {
+    border: none;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 3px 6px;
+    transition: background-color 0.2s ease;
+}
+
+.button:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.addressRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    transition: background-color 0.2s ease;
+}
+
+.addressRow:hover {
+    background-color: #343435;
+}
+
+.spActiveRow {
+    background-color: rgba(79, 70, 229, 0.18);
+    border-left: 3px solid #818cf8;
+}
+
+.spActiveRow:hover {
+    background-color: rgba(79, 70, 229, 0.3);
+}
+
+.indexCol {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.index {
+    color: #9e9e9e;
+    font-size: clamp(0.75rem, 0.85vw, 1.1rem);
+    font-weight: 600;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.spIndicator {
+    font-size: 9px;
+    background-color: #4f46e5;
+    color: #ffffff;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 700;
+}
+
+.value {
+    color: #cbd5e1;
+    font-size: clamp(0.75rem, 0.85vw, 1.1rem);
+    font-weight: 500;
+    font-family: 'Roboto Mono', monospace;
+    text-align: right;
+    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.spActiveValue {
+    color: #a5b4fc;
+    font-weight: 700;
+}
+
+.division {
+    height: 1px;
+    margin: 0 16px;
+    background: #333;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    text-align: center;
+    color: #94a3b8;
+    gap: 8px;
+    height: 100%;
+}
+
+.emptyTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.emptyDesc {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.container::-webkit-scrollbar-track {
+    background: #131313;
+}
+
+.container::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 999px;
+}
+
+.container::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}

@@ -1,4 +1,10 @@
-// Clock.js
+// Clock.js do Simulador RV32I
+// Controla os pulsos de clock e os 5 subciclos do ciclo de instrução clássico:
+// 1: Fetch (IF)
+// 2: Decode (ID)
+// 3: Execute (EX)
+// 4: Memory (MEM)
+// 5: Write-back (WB)
 
 class Clock {
     constructor() {
@@ -8,60 +14,59 @@ class Clock {
         this.emExecucao = false;
         this.timerId = null;
         this.halt = 0;
+        this.onCicloChange = null;
     }
 
     setVelocidade(ms) {
-        this.intervaloMs = ms;
+        const parsed = Number(ms);
+        this.intervaloMs = !isNaN(parsed) && parsed > 0 ? parsed : 1000;
+        if (this.emExecucao) {
+            this.pausar();
+            this.iniciar(this.currentControlUnit);
+        }
     }
 
     subPulso(controlUnit) {
+        this.currentControlUnit = controlUnit;
         if (this.halt) {
-            this.halt = 0;
-            this.totalCiclos++;
-            console.log("-------------- "+3+" --------------");
-            console.log("-------------- "+4+" --------------");
-            console.log("Espere.");
-            console.log("=============== "+this.totalCiclos+" ===============");
-            console.log("-------------- "+1+" --------------");
+            console.log("Simulador pausado ou em HALT.");
+            return;
         }
-        else {
-            console.log("-------------- "+this.subciclo+" --------------");
-            let teste = controlUnit.rodarCiclo(this.subciclo, this.totalCiclos);
-            if (teste == false) {
-                console.log("Cache miss!");
-                this.halt = 1;
-            }
-            else {
-                this.subciclo++;
-                if (this.subciclo > 4) {
-                    this.subciclo = 1;
-                    this.totalCiclos++;
-                }
-            }              
+
+        const sucesso = controlUnit.rodarCiclo(this.subciclo, this.totalCiclos);
+        if (sucesso === false) {
+            console.log("Execução interrompida.");
+            this.pausar();
+            return;
+        }
+
+        this.subciclo++;
+        if (this.subciclo > 5) {
+            this.subciclo = 1;
+            this.totalCiclos++;
+            if (this.onCicloChange) this.onCicloChange(this.totalCiclos);
         }
     }
 
     pulso(controlUnit) {
-        for (let i = 1; i <= 4; i++) {
+        // Executa uma instrução completa (5 subciclos)
+        for (let i = 1; i <= 5; i++) {
             this.subPulso(controlUnit);
         }
-        // Atualiza a interface caso seja um pulso manual inteiro
         if (this.onCicloChange) this.onCicloChange(this.totalCiclos);
     }
 
     iniciar(controlUnit) {
         if (this.emExecucao) return;
         this.emExecucao = true;
+        this.currentControlUnit = controlUnit;
 
         this.timerId = setInterval(() => {
             if (!this.emExecucao) {
                 clearInterval(this.timerId);
                 return;
             }
-            
-            if (this.subciclo == 1) console.log("=============== "+this.totalCiclos+" ===============");
             this.subPulso(controlUnit);
-            
         }, this.intervaloMs);
     }
 
@@ -76,7 +81,7 @@ class Clock {
     getCycles() {
         return this.totalCiclos;
     }
-    
+
     getSC() {
         return this.subciclo;
     }
@@ -84,10 +89,11 @@ class Clock {
     reset() {
         this.pausar();
         this.totalCiclos = 0;
-        if (this.onCicloChange) this.onCicloChange(this.totalCiclos); // Zera a tela também
+        this.subciclo = 1;
+        if (this.onCicloChange) this.onCicloChange(this.totalCiclos);
     }
 
-    resetClock() {      
+    resetClock() {
         this.pausar();
         this.subciclo = 1;
         this.totalCiclos = 0;

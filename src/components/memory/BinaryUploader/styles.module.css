@@ -1,0 +1,138 @@
+.uploadCard {
+    background-color: var(--gray-700);
+    border: 1px solid var(--gray-600);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-family: 'Roboto Mono', monospace;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.25);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cardTitle {
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.helpButton {
+    background-color: #334155;
+    color: #38bdf8;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    font-weight: bold;
+}
+
+.helpButton:hover {
+    background-color: #475569;
+    color: #ffffff;
+}
+
+.helpBox {
+    background-color: #0f172a;
+    border: 1px solid #0284c7;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: #cbd5e1;
+    line-height: 1.4;
+}
+
+.helpText {
+    margin: 0 0 6px 0;
+}
+
+.helpCommandTitle {
+    margin: 4px 0 2px 0;
+    font-size: 10px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.commandCode {
+    margin: 0;
+    background-color: #1e293b;
+    color: #38bdf8;
+    padding: 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    overflow-x: auto;
+    border: 1px solid #334155;
+}
+
+.controlsRow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.addressWrapper {
+    display: flex;
+    align-items: center;
+    background-color: var(--gray-800);
+    border: 1px solid var(--gray-600);
+    border-radius: 6px;
+    padding: 2px 6px;
+    flex: 1;
+}
+
+.addressLabel {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-right: 4px;
+    font-weight: bold;
+}
+
+.addressInput {
+    background: transparent;
+    border: none;
+    color: #f8fafc;
+    font-size: 12px;
+    font-family: inherit;
+    width: 100%;
+    outline: none;
+}
+
+.uploadBtn {
+    background: linear-gradient(135deg, #0284c7, #2563eb);
+    color: #ffffff;
+    border: 1px solid #38bdf8;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.uploadBtn:hover {
+    background: linear-gradient(135deg, #0369a1, #1d4ed8);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.statusSuccess {
+    background-color: rgba(34, 197, 94, 0.15);
+    border: 1px solid #22c55e;
+    color: #86efac;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+}

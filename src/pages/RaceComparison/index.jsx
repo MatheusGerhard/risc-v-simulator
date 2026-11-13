@@ -16,18 +16,21 @@ import {
 import ProcessorTrack from "./ProcessorTrack";
 import styles from "./styles.module.css";
 
-const DEFAULT_PROGRAM = `LOCO 10
-STOD 100
-LOCO 20
-ADDD 100
-STOD 101
-JUMP 0`;
+const DEFAULT_PROGRAM = `addi x1, x0, 10
+addi x2, x0, 20
+add x3, x1, x2
+sw x3, 0(x0)
+lw x4, 0(x0)
+beq x3, x4, fim
+addi x5, x0, 1
+fim:
+addi x5, x0, 42`;
 const DEFAULT_CACHE_SIZE = 3;
 
 const PROCESSORS = [
-    { name: "MAC-1", ControlUnit: ControlUnit1, accent: "#38bdf8" },
-    { name: "MAC-2", ControlUnit: ControlUnit2, accent: "#22c55e", usesCache: true },
-    { name: "MAC-3", ControlUnit: ControlUnit3, accent: "#f59e0b", usesCache: true },
+    { name: "RV32I", ControlUnit: ControlUnit1, accent: "#38bdf8" },
+    { name: "RV32I-C1", ControlUnit: ControlUnit2, accent: "#22c55e", usesCache: true },
+    { name: "RV32I-C2", ControlUnit: ControlUnit3, accent: "#f59e0b", usesCache: true },
 ];
 
 function normalizeCacheSize(size) {

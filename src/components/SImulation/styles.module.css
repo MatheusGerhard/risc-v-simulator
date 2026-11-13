@@ -49,7 +49,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: clamp(0.5rem, 1vw, 1.2rem);
-  font-family: 'Roboto Mono', monospace;;
+  font-family: 'Roboto Mono', monospace;
 }
 
 .botao:hover {
@@ -166,89 +166,89 @@
     position: absolute;
     right: 38%;
     top: 5%;
-    width: 8%;
+    width: 10%;
     height: 8%;
 }
 .decB{
     position: absolute;
     right: 38%;
-    top: 13%;
-    width: 8%;
+    top: 14%;
+    width: 10%;
     height: 8%;
 }
 .decC{
     position: absolute;
     right: 38%;
-    top: 21%;
-    width: 8%;
+    top: 23%;
+    width: 10%;
     height: 8%;
 }
 .mir{
     position: absolute;
-    right: 11%;
+    right: 7%;
     top: 60%;
-    width: 9%;
+    width: 14%;
     height: 8%;
 }
 .mpc{
     position: absolute;
-    right: 13%;
+    right: 11%;
     top: 40%;
-    width: 5%;
-    height: 6%;
+    width: 8%;
+    height: 7%;
 }
 .msl{
     position: absolute;
-    right: 30%;
+    right: 28%;
     top: 75%;
-    width: 6%;
-    height: 6%;
+    width: 9%;
+    height: 7%;
 }
 .mmux{
     position: absolute;
-    right: 9%;
-    top: 30%;
-    width: 14%;
+    right: 7%;
+    top: 28%;
+    width: 15%;
     height: 8%;
 }
 .controlStore{
     position: absolute;
-    right: 6%;
-    top: 50%;
-    width: 19%;
+    right: 5%;
+    top: 49%;
+    width: 18%;
     height: 9%;
 }
 .mar{
     position: absolute;
-    left: 0%;
-    top: 60%;
-    width: 11%;
+    left: 1%;
+    top: 58%;
+    width: 13%;
     height: 8%;
 }
 .mbr{
     position: absolute;
-    left: 0%;
+    left: 1%;
     top: 70%;
-    width: 14%;
+    width: 16%;
     height: 8%;
 }
 .latchA{
     position: absolute;
-    top: 45%;
+    top: 48%;
     right: 60%;
     width: 14%;
     height: 8%;
 }
 .latchB{
     position: absolute;
-    top: 45%;
+    top: 48%;
     right: 42%;
     width: 14%;
     height: 8%;
 }
 .amux{
     position: absolute;
-    top: 60%;
+    top: 62%;
     right: 60%;
     width: 14%;
     height: 8%;
@@ -256,15 +256,15 @@
 .shifter{
     position: absolute;
     top: 88%;
-    right: 51%;
-    width: 14%;
+    right: 48%;
+    width: 18%;
     height: 8%;
 }
 .clock{
     position: absolute;
     right: 7%;
-    top: 11%;
-    width: 18%;
+    top: 8%;
+    width: 20%;
     height: 12%;
 }
 
@@ -293,91 +293,101 @@
     background-color: var(--gray-800);
     border-radius: 5px;
     position: absolute;
-    top: 5%;
+    top: 3%;
     left: 2%;
-    height: 30%;
-    width: 45%;
+    height: 44%;
+    width: 48%;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     font-family: 'Roboto Mono', monospace;
+    z-index: 5;
 }
 @media (max-width: 1082px) {
   .banco {
-        height: 40%;
-        width: 47%;
+        height: 48%;
+        width: 52%;
         top: 2%;
     }
 }
 
-
 /* Parte do banco de registradores */
 .tituloBanco {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     background-color: var(--gray-800);
     color: white;
     text-shadow: 1px 2px 2px #d97706; 
     font-weight: bold;
-    text-align: center;
     border-bottom: 1px solid var(--gray-600);
-    font-size: clamp(0.4rem, 1vw, 1.2rem);
+    font-size: clamp(0.5rem, 0.85vw, 1.1rem);
     font-family: 'Roboto Mono', monospace;
-    padding: 1% 1%;
+    padding: 6px 10px;
+}
+
+.baseToggleBtn {
+    background-color: #374151;
+    color: #f3f4f6;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: 'Roboto Mono', monospace;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.15s;
+}
+
+.baseToggleBtn:hover {
+    background-color: #4b5563;
 }
 
 .registradoresGrid {
     width: 100%;
-    height: 100%;
-
+    flex: 1;
+    overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(4, 1fr);
+    gap: 3px;
+    padding: 4px;
+    background-color: #1f2937;
 }
 
 /* Registrador */
 .regItem {
     width: 100%;
-    height: 100%;
-
     display: flex;
     flex-direction: column;
     border: 1px solid var(--gray-900);
     border-radius: 3px;
-    border: 1px solid var(--gray-900);
-
     overflow: hidden;
-
     box-shadow:
         inset 0 1px 2px rgba(255,255,255,0.03),
         0 2px 6px rgba(0,0,0,0.2);
 }
 
 .regLabel {
-    height: 35%;
-
+    padding: 2px;
     display: flex;
     justify-content: center;
     align-items: center;
-
     text-shadow: 1px 1px 2px #d97706; 
     background-color: var(--gray-800);
     color: var(--white);
-
     font-weight: 700;
-    font-size: clamp(0.4rem, 1vw, 1.2rem);
-
+    font-size: clamp(0.4rem, 0.75vw, 1rem);
     border-bottom: 1px solid var(--gray-600);
 }
 
 .regValue {
-    flex: 1;
-
+    padding: 3px 2px;
     display: flex;
     justify-content: center;
     align-items: center;
-
     color: black;
-    background-color:aliceblue;
+    background-color: aliceblue;
     font-family: 'Roboto Mono', monospace;
-    font-size: clamp(0.25rem, 0.8vw, 1.2rem);
+    font-size: clamp(0.35rem, 0.7vw, 0.95rem);
+    font-weight: 600;
 }
