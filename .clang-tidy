@@ -1,0 +1,4 @@
+Checks: 'bugprone-*,cert-*,cppcoreguidelines-*,performance-*,portability-*,readability-*'
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(mac1|mac2|mac3|montador|src)/'
+FormatStyle: file
